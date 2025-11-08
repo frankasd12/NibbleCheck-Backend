@@ -7,10 +7,20 @@
 -- Dumped from database version 18.0
 -- Dumped by pg_dump version 18.0
 
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
+/*
+	The original dump contains several SET statements that may not be
+	recognized by older/newer Postgres installations used in CI runners.
+	To make the seed script tolerant, attempt to set common timeouts inside
+	a DO block and ignore failures for unsupported parameters.
+*/
+DO $$
+BEGIN
+	BEGIN EXECUTE 'SET statement_timeout = 0'; EXCEPTION WHEN OTHERS THEN NULL; END;
+	BEGIN EXECUTE 'SET lock_timeout = 0'; EXCEPTION WHEN OTHERS THEN NULL; END;
+	BEGIN EXECUTE 'SET idle_in_transaction_session_timeout = 0'; EXCEPTION WHEN OTHERS THEN NULL; END;
+	BEGIN EXECUTE 'SET transaction_timeout = 0'; EXCEPTION WHEN OTHERS THEN NULL; END;
+END$$;
+
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -19,6 +29,7 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+/* repeat-safe settings */
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);

@@ -10,7 +10,8 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # Use a Postgres image matching the dump (dumped from Postgres 18.0)
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
