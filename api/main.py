@@ -25,10 +25,15 @@ app.add_middleware(
 
 def db():
     conn = psycopg.connect(DATABASE_URL, autocommit=True)
-    # set pg_trgm similarity floor for this session
-    with conn.cursor() as cur:
-        cur.execute("SELECT set_limit(%s);", (SIMILARITY_FLOOR,))
+    # set pg_trgm similarity floor for this session, but don't fail if extension isn't present yet
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT set_limit(%s);", (SIMILARITY_FLOOR,))
+    except Exception:
+        # pg_trgm not installed yet (e.g., CI before seed) — OK for /health
+        pass
     return conn
+
 
 @app.get("/health")
 def health():
