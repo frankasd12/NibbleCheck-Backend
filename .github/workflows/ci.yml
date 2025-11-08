@@ -1,0 +1,32 @@
+﻿name: DB CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pg-apply:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dogfood
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d dogfood"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply SQL
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql "postgresql://postgres:postgres@localhost:5432/dogfood" -f db/00_extensions.sql
+          psql "postgresql://postgres:postgres@localhost:5432/dogfood" -f db/01_types.sql
+          psql "postgresql://postgres:postgres@localhost:5432/dogfood" -f db/02_tables.sql
+          psql "postgresql://postgres:postgres@localhost:5432/dogfood" -f db/03_indexes.sql
+          if [ -s db/04_seeds_core.sql ]; then
+            psql "postgresql://postgres:postgres@localhost:5432/dogfood" -f db/04_seeds_core.sql
+          fi
+          psql "postgresql://postgres:postgres@localhost:5432/dogfood" -f db/99_verify.sql
