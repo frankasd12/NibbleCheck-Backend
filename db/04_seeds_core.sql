@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict nwyctpNrTOAFGlhnkjn18maXT3HsIAs5iOtJvIZ5t3AieCflPt9p0avD0D66FYp
+\restrict 9EVIYnkYaVT4lUw8ci1B9GDIhXwqdfQzorlmfECyGTp4xl52YfqtTJhWaZxfdb0
 
 -- Dumped from database version 18.0
 -- Dumped by pg_dump version 18.0
@@ -23,11 +23,6 @@ SET row_security = off;
 -- Data for Name: foods; Type: TABLE DATA; Schema: public; Owner: app
 --
 
-INSERT INTO public.foods VALUES (1, 'grape', 'fruit', 'UNSAFE', 'Toxic; includes raisins', NULL, '2025-11-07 17:10:50.319165-05', '2025-11-07 17:10:50.319165-05');
-INSERT INTO public.foods VALUES (2, 'raisin', 'fruit', 'UNSAFE', 'Dried grapes; toxic', NULL, '2025-11-07 17:10:50.319165-05', '2025-11-07 17:10:50.319165-05');
-INSERT INTO public.foods VALUES (3, 'chocolate', 'sweets', 'UNSAFE', 'Theobromine; darker = worse', NULL, '2025-11-07 17:10:50.319165-05', '2025-11-07 17:10:50.319165-05');
-INSERT INTO public.foods VALUES (4, 'apple', 'fruit', 'CAUTION', 'No seeds/core', NULL, '2025-11-07 17:10:50.319165-05', '2025-11-07 17:10:50.319165-05');
-INSERT INTO public.foods VALUES (5, 'chicken', 'protein', 'SAFE', 'Plain, cooked, no bones/seasoning', NULL, '2025-11-07 17:10:50.319165-05', '2025-11-07 17:10:50.319165-05');
 INSERT INTO public.foods VALUES (6, 'banana', 'fruit', 'SAFE', 'Small pieces okay; high sugar—use as occasional treat.', '{akc.org}', '2025-11-07 18:11:25.412983-05', '2025-11-07 18:11:25.412983-05');
 INSERT INTO public.foods VALUES (7, 'blueberry', 'fruit', 'SAFE', 'Small handful okay; rich in fiber—introduce slowly.', '{akc.org}', '2025-11-07 18:11:25.412983-05', '2025-11-07 18:11:25.412983-05');
 INSERT INTO public.foods VALUES (8, 'strawberry', 'fruit', 'SAFE', 'Small amounts okay; cut into pieces; high natural sugars.', '{akc.org}', '2025-11-07 18:11:25.412983-05', '2025-11-07 18:11:25.412983-05');
@@ -172,6 +167,11 @@ INSERT INTO public.foods VALUES (146, 'seaweed (plain nori)', 'other', 'CAUTION'
 INSERT INTO public.foods VALUES (147, 'raisins/trail mix products', 'dessert', 'UNSAFE', 'Any product containing raisins is unsafe.', '{petpoisonhelpline.com,aspca.org,merckvetmanual.com}', '2025-11-07 18:11:25.412983-05', '2025-11-07 18:11:25.412983-05');
 INSERT INTO public.foods VALUES (148, 'grape leaves/vines', 'other', 'UNSAFE', 'Grapes and related plant parts unsafe; avoid.', '{aspca.org,petpoisonhelpline.com}', '2025-11-07 18:11:25.412983-05', '2025-11-07 18:11:25.412983-05');
 INSERT INTO public.foods VALUES (149, 'poppy seeds', 'seed', 'CAUTION', 'Can cause false positives on drug tests; not needed for dogs; tiny amounts only.', '{merckvetmanual.com,akc.org,aspca.org}', '2025-11-07 18:11:25.412983-05', '2025-11-07 18:11:25.412983-05');
+INSERT INTO public.foods VALUES (1, 'grape', 'fruit', 'UNSAFE', 'Toxic to dogs; can cause acute kidney injury. Avoid all forms (grapes, raisins/sultanas/currants), fresh or dried, seeded or seedless; even small amounts may be dangerous.', '{akc.org,aspca.org,petpoisonhelpline.com,merckvetmanual.com}', '2025-11-07 17:10:50.319165-05', '2025-11-07 19:26:10.403427-05');
+INSERT INTO public.foods VALUES (2, 'raisin', 'fruit', 'UNSAFE', 'Same risk as grapes (toxic); dried form is more concentrated. Keep away from trail mix, breads, cookies, and cereals that contain raisins.', '{akc.org,aspca.org,petpoisonhelpline.com,merckvetmanual.com}', '2025-11-07 17:10:50.319165-05', '2025-11-07 19:26:10.403427-05');
+INSERT INTO public.foods VALUES (3, 'chocolate', 'sweets', 'UNSAFE', 'Contains theobromine and caffeine (methylxanthines). Dark/baking chocolate and cocoa powder are highest risk; signs include vomiting, agitation, tachycardia, seizures. Never safe.', '{akc.org,aspca.org,petpoisonhelpline.com,merckvetmanual.com}', '2025-11-07 17:10:50.319165-05', '2025-11-07 19:26:10.403427-05');
+INSERT INTO public.foods VALUES (4, 'apple', 'fruit', 'CAUTION', 'Flesh is generally safe in small pieces. Remove core, seeds, and stem (cyanogenic glycosides). No added sugar or seasoning; avoid choking hazards.', '{akc.org,aspca.org,merckvetmanual.com}', '2025-11-07 17:10:50.319165-05', '2025-11-07 19:26:10.403427-05');
+INSERT INTO public.foods VALUES (5, 'chicken', 'protein', 'SAFE', 'Plain cooked chicken (boiled/baked) without skin, bones, or seasoning is safe. Avoid cooked bones (splinter risk) and onions/garlic, heavy oils, or sauces.', '{akc.org,aspca.org,merckvetmanual.com}', '2025-11-07 17:10:50.319165-05', '2025-11-07 19:26:10.403427-05');
 
 
 --
@@ -701,5 +701,5 @@ SELECT pg_catalog.setval('public.synonyms_id_seq', 313, true);
 -- PostgreSQL database dump complete
 --
 
-\unrestrict nwyctpNrTOAFGlhnkjn18maXT3HsIAs5iOtJvIZ5t3AieCflPt9p0avD0D66FYp
+\unrestrict 9EVIYnkYaVT4lUw8ci1B9GDIhXwqdfQzorlmfECyGTp4xl52YfqtTJhWaZxfdb0
 
