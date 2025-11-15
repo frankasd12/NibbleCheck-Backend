@@ -144,12 +144,7 @@ def _tokenize_ingredients(s: str) -> List[str]:
 
 def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
     """
-    Resolve ingredient tokens *directly* against the foods + synonyms tables.
-
-    For each token:
-      1. Try to match a row in `synonyms` (synonyms.name ILIKE token).
-      2. If that fails, try `foods.canonical_name` ILIKE token.
-    Then attach notes + sources from foods for all matches.
+    Resolve ingredient tokens with fuzzy matching support.
     """
     hits: List[Dict[str, Any]] = []
     if not tokens:
@@ -161,58 +156,60 @@ def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
             if not token:
                 continue
 
-            # --- 1) Prefer matches in synonyms ---
+            # --- 1) Prefer exact/prefix matches in synonyms ---
             cur.execute(
                 """
                 SELECT f.id,
                        f.canonical_name,
                        f.default_status,
-                       s.name
+                       s.name,
+                       similarity(s.name, %s) AS score
                 FROM synonyms AS s
                 JOIN foods AS f ON f.id = s.food_id
-                WHERE s.name ILIKE %s
+                WHERE s.name % %s
+                ORDER BY score DESC
                 LIMIT 1;
                 """,
-                (f"%{token}%",),
+                (token, token),
             )
             row = cur.fetchone()
-            if row:
-                hits.append(
-                    {
-                        "token": t,
-                        "food_id": row[0],
-                        "name": row[1],          # canonical_name
-                        "status": row[2],        # default_status
-                        "matched_from": "synonym",
-                        "db_score": 1.0,
-                    }
-                )
+            if row and row[4] >= SIMILARITY_FLOOR:  # Use similarity threshold
+                hits.append({
+                    "token": t,
+                    "food_id": row[0],
+                    "name": row[1],
+                    "status": row[2],
+                    "matched_from": "synonym",
+                    "db_score": row[4],
+                })
                 continue
 
-            # --- 2) Fall back to canonical_name in foods ---
+            # --- 2) Fall back to fuzzy canonical_name ---
             cur.execute(
                 """
-                SELECT id, canonical_name, default_status
+                SELECT id,
+                       canonical_name,
+                       default_status,
+                       similarity(canonical_name, %s) AS score
                 FROM foods
-                WHERE canonical_name ILIKE %s
+                WHERE canonical_name % %s
+                ORDER BY score DESC
                 LIMIT 1;
                 """,
-                (f"%{token}%",),
+                (token, token),
             )
             row = cur.fetchone()
-            if row:
-                hits.append(
-                    {
-                        "token": t,
-                        "food_id": row[0],
-                        "name": row[1],
-                        "status": row[2],
-                        "matched_from": "canonical",
-                        "db_score": 1.0,
-                    }
-                )
+            if row and row[3] >= SIMILARITY_FLOOR:
+                hits.append({
+                    "token": t,
+                    "food_id": row[0],
+                    "name": row[1],
+                    "status": row[2],
+                    "matched_from": "food",
+                    "db_score": row[3],
+                })
 
-        # --- Attach notes + sources from foods for all matched food_ids ---
+        # --- Attach notes + sources ---
         if hits:
             food_ids = sorted({h["food_id"] for h in hits})
             cur.execute(
@@ -444,40 +441,19 @@ def ingredients_resolve(payload: Dict[str, Any]):
 @app.post("/barcode/resolve")
 def barcode_resolve(payload: Dict[str, Any]):
     """
-    Resolve a packaged-food barcode into ingredients and then cross-reference
-    each ingredient against the foods DB (foods + synonyms).
+    Resolve barcode by accepting raw ingredients text directly.
+    Cross-reference each ingredient against the foods DB (foods + synonyms).
     """
     code = str(payload.get("barcode", "")).strip()
+    ingredients_text = str(payload.get("ingredients_text", "")).strip()
+    display_name = str(payload.get("display_name", "Unknown Product")).strip()
+    
     if not code:
         raise HTTPException(400, "barcode is required")
+    
+    if not ingredients_text:
+        raise HTTPException(400, "ingredients_text is required")
 
-    with db() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT display_name, ingredients_text
-            FROM barcode_items
-            WHERE barcode = %s;
-            """,
-            (code,),
-        )
-        row = cur.fetchone()
-
-    if not row:
-        # nicely-handled "not found" case
-        return {
-            "barcode": code,
-            "display_name": None,
-            "raw_ingredients": None,
-            "hits": [],
-            "overall_status": "UNKNOWN",
-            "error": "barcode_not_found",
-            "message": (
-                "This barcode is not in our food database. "
-                "It may be a non-food item or a product we haven't indexed yet."
-            ),
-        }
-
-    display_name, ingredients_text = row[0], row[1] or ""
     tokens = _tokenize_ingredients(ingredients_text)
     hits = _resolve_tokens_against_db(tokens)
 
