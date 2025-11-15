@@ -167,7 +167,7 @@ def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
                        similarity(s.name, %s) AS score
                 FROM synonyms AS s
                 JOIN foods AS f ON f.id = s.food_id
-                WHERE s.name % %s
+                WHERE s.name %% %s
                 ORDER BY score DESC
                 LIMIT 1;
                 """,
@@ -195,7 +195,7 @@ def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
                        default_status,
                        similarity(canonical_name, %s) AS score
                 FROM foods
-                WHERE canonical_name % %s
+                WHERE canonical_name %% %s
                 ORDER BY score DESC
                 LIMIT 1;
                 """,
@@ -241,7 +241,6 @@ def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
                     h["sources"] = e["sources"]
 
     return hits
-
 
 # -------------------------------------------------
 # Simple search / details endpoints
