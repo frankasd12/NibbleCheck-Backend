@@ -144,11 +144,12 @@ def _tokenize_ingredients(s: str) -> List[str]:
 
 def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
     """
-    Shared resolver used by both /ingredients/resolve and /barcode/resolve.
+    Resolve ingredient tokens *directly* against the foods + synonyms tables.
 
-    1. For each token, try search_foods_enriched (trigram + synonyms).
-    2. If that fails, fall back to a simple ILIKE over foods/synonyms.
-    3. Attach notes + sources from foods for each hit.
+    For each token:
+      1. Try to match a row in `synonyms` (synonyms.name ILIKE token).
+      2. If that fails, try `foods.canonical_name` ILIKE token.
+    Then attach notes + sources from foods for all matches.
     """
     hits: List[Dict[str, Any]] = []
     if not tokens:
@@ -156,72 +157,62 @@ def _resolve_tokens_against_db(tokens: List[str]) -> List[Dict[str, Any]]:
 
     with db() as conn, conn.cursor() as cur:
         for t in tokens:
-            # First try the trigram-search function, if available
-            try:
-                cur.execute(
-                    """
-                    SELECT food_id,
-                           canonical_name,
-                           default_status,
-                           matched,
-                           matched_from,
-                           score
-                    FROM search_foods_enriched(%s, %s);
-                    """,
-                    (t, 5),
-                )
-                rows = cur.fetchall()
-                rows = [r for r in rows if float(r[5]) >= SIMILARITY_FLOOR]
-                if rows:
-                    # Best = worst safety, then highest score
-                    best = sorted(
-                        rows,
-                        key=lambda r: (
-                            STATUS_WEIGHT.get(str(r[2]), 1),
-                            float(r[5]),
-                        ),
-                        reverse=True,
-                    )[0]
-                    hits.append(
-                        {
-                            "token": t,
-                            "food_id": best[0],
-                            "name": best[1],
-                            "status": best[2],
-                            "matched_from": best[4],
-                            "db_score": float(best[5]),
-                        }
-                    )
-                    continue
-            except Exception:
-                # If search function is missing / errors, fall back below
-                pass
+            token = t.strip()
+            if not token:
+                continue
 
-            # Fallback: plain ILIKE across foods + synonyms
+            # --- 1) Prefer matches in synonyms ---
             cur.execute(
                 """
-                SELECT f.id, f.canonical_name, f.default_status
-                FROM foods f
-                LEFT JOIN synonyms s ON s.food_id = f.id
-                WHERE f.canonical_name ILIKE %s OR s.name ILIKE %s
+                SELECT f.id,
+                       f.canonical_name,
+                       f.default_status,
+                       s.name
+                FROM synonyms AS s
+                JOIN foods AS f ON f.id = s.food_id
+                WHERE s.name ILIKE %s
                 LIMIT 1;
                 """,
-                (f"%{t}%", f"%{t}%"),
+                (f"%{token}%",),
             )
-            r = cur.fetchone()
-            if r:
+            row = cur.fetchone()
+            if row:
                 hits.append(
                     {
                         "token": t,
-                        "food_id": r[0],
-                        "name": r[1],
-                        "status": r[2],
-                        "matched_from": "fallback",
-                        "db_score": 0.0,
+                        "food_id": row[0],
+                        "name": row[1],          # canonical_name
+                        "status": row[2],        # default_status
+                        "matched_from": "synonym",
+                        "db_score": 1.0,
+                    }
+                )
+                continue
+
+            # --- 2) Fall back to canonical_name in foods ---
+            cur.execute(
+                """
+                SELECT id, canonical_name, default_status
+                FROM foods
+                WHERE canonical_name ILIKE %s
+                LIMIT 1;
+                """,
+                (f"%{token}%",),
+            )
+            row = cur.fetchone()
+            if row:
+                hits.append(
+                    {
+                        "token": t,
+                        "food_id": row[0],
+                        "name": row[1],
+                        "status": row[2],
+                        "matched_from": "canonical",
+                        "db_score": 1.0,
                     }
                 )
 
-        # Attach notes + sources for all distinct food_ids in one query
+        # --- Attach notes + sources from foods for all matched food_ids ---
         if hits:
             food_ids = sorted({h["food_id"] for h in hits})
             cur.execute(
@@ -454,7 +445,7 @@ def ingredients_resolve(payload: Dict[str, Any]):
 def barcode_resolve(payload: Dict[str, Any]):
     """
     Resolve a packaged-food barcode into ingredients and then cross-reference
-    each ingredient against the foods DB.
+    each ingredient against the foods DB (foods + synonyms).
     """
     code = str(payload.get("barcode", "")).strip()
     if not code:
@@ -472,7 +463,7 @@ def barcode_resolve(payload: Dict[str, Any]):
         row = cur.fetchone()
 
     if not row:
-        # Return a special response indicating barcode not found
+        # nicely-handled "not found" case
         return {
             "barcode": code,
             "display_name": None,
@@ -480,7 +471,10 @@ def barcode_resolve(payload: Dict[str, Any]):
             "hits": [],
             "overall_status": "UNKNOWN",
             "error": "barcode_not_found",
-            "message": "This barcode is not in our food database. It may be a non-food item or a product we haven't indexed yet.",
+            "message": (
+                "This barcode is not in our food database. "
+                "It may be a non-food item or a product we haven't indexed yet."
+            ),
         }
 
     display_name, ingredients_text = row[0], row[1] or ""
