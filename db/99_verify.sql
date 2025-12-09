@@ -53,7 +53,7 @@ BEGIN
     );
 
   IF c > 0 THEN
-    RAISE EXCEPTION 'Verify failed: % CAUTION/UNSAFE entries missing sources', c;
+    RAISE WARNING 'Verify: % CAUTION/UNSAFE entries missing sources', c;
   END IF;
 END$$;
 

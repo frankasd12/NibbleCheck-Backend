@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 import requests
 from PIL import Image
 
-import vision
+from api import vision
+
 
 
 load_dotenv()
