@@ -1,6 +1,8 @@
 # api/main.py
 import os
 import re
+import io
+import json
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
@@ -9,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import psycopg
 from dotenv import load_dotenv
 import requests
+from PIL import Image
+
+import vision
+
 
 load_dotenv()
 
@@ -408,13 +414,131 @@ def food_detail(food_id: int):
 @app.post("/classify/resolve")
 async def classify_resolve(file: UploadFile):
     """
-    Placeholder for future CV/OCR pipeline.
+    Image → YOLO detector → DB resolver.
 
-    The mobile app already treats an empty candidate list as "no detections",
-    so returning an empty list keeps things working without breaking the UI.
+    1) Accept an uploaded image file.
+    2) Run YOLO to detect food objects.
+    3) Map detected labels into canonical foods via _resolve_tokens_against_db.
+    4) Return candidates + overall_status (and log to inferences table).
     """
-    # For now we simply return an empty list.
-    return {"candidates": []}
+    if file is None:
+        raise HTTPException(400, "file is required")
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(400, "Empty upload")
+
+    # Decode image
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+    except Exception:
+        raise HTTPException(400, "Could not decode image")
+
+    # Run detector
+    try:
+        detections = vision.detect_foods(img)
+    except Exception as e:
+        # If the model failed to load or run, surface a 500 so you see it in logs.
+        raise HTTPException(500, f"vision_model_error: {e}")
+
+    if not detections:
+        # Log an empty inference but return no candidates
+        try:
+            with db() as conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO inferences (image_url, detections, kb_hits)
+                    VALUES (%s, %s::jsonb, %s::jsonb);
+                    """,
+                    (None, json.dumps([]), json.dumps([])),
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+        return {"candidates": []}
+
+    # Deduplicate labels, keeping the highest model score per label
+    best_det_by_label: Dict[str, Dict[str, Any]] = {}
+    for d in detections:
+        label = str(d.get("label") or "").strip()
+        if not label:
+            continue
+        prev = best_det_by_label.get(label)
+        score = float(d.get("score") or 0.0)
+        if prev is None or score > float(prev.get("score") or 0.0):
+            best_det_by_label[label] = d
+
+    labels = list(best_det_by_label.keys())
+
+    # Use your existing fuzzy resolver to map labels → foods
+    hits = _resolve_tokens_against_db(labels)
+
+    # Best DB hit per token
+    best_hit_by_token: Dict[str, Dict[str, Any]] = {}
+    for h in hits:
+        token = str(h.get("token") or "")
+        if not token:
+            continue
+        prev = best_hit_by_token.get(token)
+        score = float(h.get("db_score") or 0.0)
+        if prev is None or score > float(prev.get("db_score") or 0.0):
+            best_hit_by_token[token] = h
+
+    candidates: List[Dict[str, Any]] = []
+    items_for_overall: List[Dict[str, Any]] = []
+
+    # Join detections + DB hits by label/token
+    for label, det in best_det_by_label.items():
+        hit = best_hit_by_token.get(label)
+        if not hit:
+            # For now, skip detections that don't map into the KB
+            continue
+
+        status = hit.get("status")
+
+        cand = {
+            # Used by the mobile app mapping in src/api.ts
+            "label": label,
+            "model_label": label,
+            "food_id": hit.get("food_id"),
+            "name": hit.get("name") or label,
+            "status": status,
+            "matched_from": hit.get("matched_from"),
+            "model_score": float(det.get("score") or 0.0),
+            "det_conf": float(det.get("score") or 0.0),
+            "db_score": hit.get("db_score"),
+            "sources": hit.get("sources") or [],
+            "notes": hit.get("notes"),
+        }
+
+        candidates.append(cand)
+        items_for_overall.append({"status": status})
+
+    overall_status = _pick_overall_status(items_for_overall)
+
+    # Log to inferences table for auditing
+    try:
+        with db() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO inferences (image_url, detections, final_status, kb_hits)
+                VALUES (%s, %s::jsonb, %s::food_status, %s::jsonb);
+                """,
+                (
+                    None,  # later: S3 URL or similar
+                    json.dumps(detections),
+                    overall_status,
+                    json.dumps(hits),
+                ),
+            )
+            conn.commit()
+    except Exception:
+        # Non-fatal: don't break the API if logging fails
+        pass
+
+    return {"candidates": candidates, "overall_status": overall_status}
+
 
 
 # -------------------------------------------------
