@@ -34,36 +34,37 @@ def get_model():
     return _MODEL
 
 
-def detect_foods(image: Image.Image, conf_threshold: float = 0.25) -> List[Dict[str, Any]]:
-    """
-    Run object detection on a PIL image and return a simple list of detections:
-    [{label, score, bbox}, ...]
-    bbox is [x1, y1, x2, y2] in pixel coordinates.
-    """
+def detect_foods(image: Image.Image, conf_threshold: float = 0.25):
     model = get_model()
 
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    results = model(image)[0]
+    # Downscale big images to speed up inference on CPU
+    max_side = 480  # try 320–480 and see what feels good
+    w, h = image.size
+    scale = min(max_side / max(w, h), 1.0)
+    if scale < 1.0:
+        image = image.resize((int(w * scale), int(h * scale)))
+
+    results = model(
+        image,
+        imgsz=max_side,
+        conf=conf_threshold,
+        verbose=False,
+    )[0]
+
     names = results.names if hasattr(results, "names") else model.names
     boxes = results.boxes
 
-    detections: List[Dict[str, Any]] = []
+    detections = []
     for cls_idx, conf, xyxy in zip(boxes.cls, boxes.conf, boxes.xyxy):
         score = float(conf)
         if score < conf_threshold:
             continue
-
         label = str(names[int(cls_idx)])
         bbox = [float(v) for v in xyxy.tolist()]
-
-        detections.append(
-            {
-                "label": label,
-                "score": score,
-                "bbox": bbox,
-            }
-        )
+        detections.append({"label": label, "score": score, "bbox": bbox})
 
     return detections
+
