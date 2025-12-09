@@ -65,11 +65,20 @@ jobs:
           from api.main import app
 
           c = TestClient(app)
-          r = c.get("/health")
-          print("STATUS:", r.status_code)
-          print("BODY:", r.text)
+
+          # Root health
+          r = c.get("/")
+          print("ROOT STATUS:", r.status_code)
+          print("ROOT BODY:", r.text)
           assert r.status_code == 200, r.text
           assert r.json().get("ok") is True, r.text
+
+          # DB health
+          r2 = c.get("/__health/db")
+          print("DB STATUS:", r2.status_code)
+          print("DB BODY:", r2.text)
+          assert r2.status_code == 200, r2.text
+          assert r2.json().get("ok") is True, r2.text
           PY
 
       - name: API CV /classify/resolve smoke test
